@@ -18,12 +18,6 @@
 
 package com.beust.jcommander;
 
-import com.beust.jcommander.converters.NoConverter;
-import com.beust.jcommander.converters.StringConverter;
-import com.beust.jcommander.internal.DefaultConverterFactory;
-import com.beust.jcommander.internal.Lists;
-import com.beust.jcommander.internal.Maps;
-
 import java.io.BufferedReader;
 import java.io.Console;
 import java.io.FileReader;
@@ -40,7 +34,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.ResourceBundle;
+
+import com.beust.jcommander.converters.NoConverter;
+import com.beust.jcommander.converters.StringConverter;
+import com.beust.jcommander.internal.DefaultConverterFactory;
+import com.beust.jcommander.internal.Lists;
+import com.beust.jcommander.internal.Maps;
 
 /**
  * The main class for JCommander. It's responsible for parsing the object that contains
@@ -94,6 +95,16 @@ public class JCommander {
    * thrown.
    */
   private Map<Field, ParameterDescription> m_requiredFields = Maps.newHashMap();
+  
+  /**
+   * A set of all fields which have been seen so far
+   */
+  private Map<Field, ParameterDescription> m_observedFields = Maps.newHashMap();
+  
+  /**
+   * A set of all fields which have been excluded
+   */
+  private Map<Field, Field> m_excludedFields = Maps.newHashMap();
 
   /**
    * A map of all the annotated fields.
@@ -223,6 +234,20 @@ public class JCommander {
         throw new ParameterException("Main parameters are required (\""
             + m_mainParameterDescription.getDescription() + "\")");
       }
+    }
+    
+    // Validate exclusions
+    if (!m_excludedFields.isEmpty()) {
+    	boolean found = false;
+    	StringBuilder excludedFields = new StringBuilder();
+        for (Entry<Field, Field> pair : m_excludedFields.entrySet()) {
+        	if (m_observedFields.containsKey(pair.getKey()))
+        		excludedFields.append(m_fields.get(pair.getKey()).getNames())
+        			.append(" (conflicts with ")
+        			.append(m_fields.get(pair.getValue()).getNames())
+        			.append(") ");
+        }
+        throw new ParameterException("The following options may not be used together: " + excludedFields);
     }
   }
   
@@ -484,9 +509,10 @@ public class JCommander {
               int arity = pd.getParameter().arity();
               int n = (arity != -1 ? arity : 1);
 
-              int offset = "--".equals(args[i + 1]) ? 1 : 0;
-
               if (i + n < args.length) {
+            	// What does this do?
+            	int offset = "--".equals(args[i + 1]) ? 1 : 0;
+            	  
                 for (int j = 1; j <= n; j++) {
                   pd.addValue(trim(args[i + j + offset]));
                   m_requiredFields.remove(pd.getField());
@@ -497,6 +523,12 @@ public class JCommander {
               }
             }
           }
+          
+	      // Track observed fields
+          m_observedFields.put(pd.getField(), pd);
+          
+          updateDependencies(pd);
+          
         } else {
           throw new ParameterException("Unknown option: " + a);
         }
@@ -545,7 +577,42 @@ public class JCommander {
     }
   }
 
-  private String[] subArray(String[] args, int index) {
+  private void updateDependencies(ParameterDescription pd) {
+	  // Add dependencies
+      for (String f: pd.getParameter().dependsOn()) {
+    	  Field field = getField(f);
+    	  if (field != null && !m_observedFields.containsKey(field))
+    		  m_requiredFields.put(field, m_fields.get(field));
+      }
+      
+      // Add exclusions
+      for (String f: pd.getParameter().exclusiveOf()) {
+    	  Field field = getField(f);
+    	  if (field != null)
+    		  m_excludedFields.put(field, pd.getField());
+      }
+      
+      // Add provisions
+      for (String f: pd.getParameter().provides()) {
+    	  Field field = getField(f);
+    	  if (field != null && !m_observedFields.containsKey(field)) {
+    		  ParameterDescription pd2 = m_fields.get(field);
+    		  m_observedFields.put(field, pd2);
+    		  m_requiredFields.remove(field);
+			  updateDependencies(pd2);
+    	  }
+      }
+}
+
+private Field getField(String name) {
+	  for (Field f: m_fields.keySet()) {
+		  if (f.getName().equals(name))
+			  return f;
+	  }
+	  return null;
+  }
+
+private String[] subArray(String[] args, int index) {
     int l = args.length - index;
     String[] result = new String[l];
     System.arraycopy(args, index, result, 0, l);
@@ -666,7 +733,7 @@ public class JCommander {
     if (m_mainParameterAnnotation != null) {
       out.append(" " + m_mainParameterAnnotation.description() + "\n");
     }
-    out.append("  Options:");
+    out.append("  Options:\n");
 
     // 
     // Align the descriptions at the "longestName" column

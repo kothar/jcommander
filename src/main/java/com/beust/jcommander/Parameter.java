@@ -72,4 +72,19 @@ public @interface Parameter {
    * If true, this parameter won't appear in the usage().
    */
   boolean hidden() default false;
+  
+  /**
+   * The names of other parameters which must be present if this is.
+   */
+  String[] dependsOn() default {};
+  
+  /**
+   * The names of other parameters which must not be present if this is.
+   */
+  String[] exclusiveOf() default {};
+  
+  /**
+   * The names of other parameters which are inferred from this one.
+   */
+  String[] provides() default {};
 }
