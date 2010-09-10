@@ -19,13 +19,14 @@
 package com.beust.jcommander;
 
 import java.io.BufferedReader;
-import java.io.Console;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -121,7 +122,7 @@ public class JCommander {
   /**
    * List of commands and their instance.
    */
-  private Map<String, JCommander> m_commands = Maps.newHashMap();
+  private Map<String, JCommander> m_commands = Maps.newLinkedHashMap();
 
   /**
    * The name of the command after the parsing has run.
@@ -484,12 +485,7 @@ public class JCommander {
             //
             // Password option, use the Console to retrieve the password
             //
-            Console console = System.console();
-            if (console == null) {
-              throw new ParameterException("No console is available to get parameter " + a);
-            }
-            System.out.print("Value for " + a + " (" + pd.getDescription() + "):");
-            char[] password = console.readPassword();
+            char[] password = readPassword(pd.getDescription());
             pd.addValue(new String(password));
           } else {
             //
@@ -612,6 +608,38 @@ private Field getField(String name) {
 	  return null;
   }
 
+/**
+   * Invoke Console.readPassword through reflection to avoid depending
+   * on Java 6.
+   */
+  private char[] readPassword(String description) {
+    System.out.print(description + ": ");
+    try {
+      Method consoleMethod = System.class.getDeclaredMethod("console", new Class<?>[0]);
+      Object console = consoleMethod.invoke(null, new Object[0]); 
+      Method readPassword = console.getClass().getDeclaredMethod("readPassword", new Class<?>[0]);
+      return (char[]) readPassword.invoke(console, new Object[0]);
+    } catch (Throwable t) {
+      return readLine(description);
+    }
+  }
+
+  /**
+   * Read a line from stdin (used when java.io.Console is not available)
+   */
+  private char[] readLine(String description) {
+    try {
+      InputStreamReader isr = new InputStreamReader(System.in);
+      BufferedReader in = new BufferedReader(isr);
+      String result = in.readLine();
+      in.close();
+      isr.close();
+      return result.toCharArray();
+    } catch (IOException e) {
+      throw new ParameterException(e);
+    }
+  }
+
 private String[] subArray(String[] args, int index) {
     int l = args.length - index;
     String[] result = new String[l];
@@ -687,12 +715,12 @@ private String[] subArray(String[] args, int index) {
    */
   public void usage(String commandName, StringBuilder out) {
     String description = getCommandDescription(commandName);
-
+    JCommander jc = m_commands.get(commandName);
     if (description != null) {
       out.append(description);
       out.append("\n");
     }
-    usage(out);
+    jc.usage(out);
   }
 
   /**
@@ -771,7 +799,8 @@ private String[] subArray(String[] args, int index) {
           + (pd.getParameter().required() ? "* " : "  ")
           + pd.getNames() + s(spaceCount) + pd.getDescription());
       Object def = pd.getDefault();
-      if (def != null) out.append(" (default: " + def + ")");      out.append("\n");
+      if (def != null) out.append(" (default: " + def + ")");
+      out.append("\n");
     }
 
     //
@@ -917,6 +946,10 @@ private String[] subArray(String[] args, int index) {
     JCommander jc = new JCommander(object);
     jc.setProgramName(name);
     m_commands.put(name, jc);
+  }
+
+  public Map<String, JCommander> getCommands() {
+    return m_commands;
   }
 
   public String getParsedCommand() {

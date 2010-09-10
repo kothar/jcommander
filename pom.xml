@@ -24,7 +24,7 @@
   <artifactId>jcommander</artifactId>
   <packaging>jar</packaging>
   <name>JCommander</name>
-  <version>1.7-SNAPSHOT</version>
+  <version>1.8-SNAPSHOT</version>
   <description>A Java framework to parse command line options with annotations.</description>
   <url>http://beust.com/jcommander</url>
   <licenses>
@@ -77,6 +77,7 @@
         <version>2.3.1</version>
         <configuration>
           <source>1.5</source>
+          <target>1.5</target>
           <encoding>UTF-8</encoding>
         </configuration>
       </plugin>
@@ -114,22 +115,6 @@
           <excludePackageNames>*.internal</excludePackageNames>
         </configuration>
       </plugin>
-
-      <!-- Signing with gpg -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-gpg-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>sign-artifacts</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>sign</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-
     </plugins>
   </build>
 
@@ -179,6 +164,30 @@
               <execution>
                 <goals>
                   <goal>check</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <!-- Signing with gpg -->
+    <!--
+    Sign the artifacts by calling
+    mvn -P sign [..]
+    -->
+    <profile>
+      <id>sign</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
                 </goals>
               </execution>
             </executions>
